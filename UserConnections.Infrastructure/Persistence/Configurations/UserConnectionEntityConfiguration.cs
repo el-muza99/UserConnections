@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using System.Net;
 using UserConnections.Infrastructure.Entities;
 
 namespace UserConnections.Infrastructure.Persistence.Configurations;
@@ -17,7 +20,7 @@ public class UserConnectionEntityConfiguration : IEntityTypeConfiguration<UserCo
         
         builder.Property(x => x.IpAddress)
             .HasColumnName("IpAddress")
-            .HasColumnType("inet")
+            .HasColumnType("varchar")
             .HasMaxLength(45);
         
         builder.Property(x => x.LastConnectionUtc)

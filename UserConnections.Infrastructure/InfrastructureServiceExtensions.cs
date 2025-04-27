@@ -6,6 +6,7 @@ using UserConnections.Application.Repositories;
 using UserConnections.Infrastructure.Persistence;
 using UserConnections.Infrastructure.Repositories;
 using UserConnections.Infrastructure.Services;
+using UserConnections.Infrastructure.Settings;
 
 namespace UserConnections.Infrastructure;
 
@@ -15,6 +16,7 @@ public static class InfrastructureServiceExtensions
         this IServiceCollection services, 
         IConfiguration configuration)
     {
+        // Register DbContext using connection string from API layer's configuration
         services.AddDbContext<UserConnectionDbContext>(options =>
         {
             options.UseNpgsql(
@@ -22,7 +24,9 @@ public static class InfrastructureServiceExtensions
                 npgsqlOptions => npgsqlOptions.EnableRetryOnFailure());
         });
         
-        services.AddHostedService<PostgresExtensionInitializer>();
+        services.Configure<ConnectionProcessorSettings>(
+            configuration.GetSection(ConnectionProcessorSettings.SectionName));
+        
         services.AddHostedService<ConnectionEventProcessor>();
 
         services.AddScoped<IUserConnectionRepository, UserConnectionRepository>();
@@ -33,23 +37,3 @@ public static class InfrastructureServiceExtensions
     }
 }
 
-public class PostgresExtensionInitializer : IHostedService
-{
-    private readonly IServiceProvider _serviceProvider;
-
-    public PostgresExtensionInitializer(IServiceProvider serviceProvider)
-    {
-        _serviceProvider = serviceProvider;
-    }
-
-    public async Task StartAsync(CancellationToken cancellationToken)
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<UserConnectionDbContext>();
-        
-        await dbContext.Database.MigrateAsync(cancellationToken);
-        await dbContext.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS pg_trgm;", cancellationToken);
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-} 

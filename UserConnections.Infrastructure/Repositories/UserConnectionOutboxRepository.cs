@@ -1,3 +1,4 @@
+using System.Net;
 using UserConnections.Application.Repositories;
 using UserConnections.Domain.Events;
 using UserConnections.Infrastructure.Entities;

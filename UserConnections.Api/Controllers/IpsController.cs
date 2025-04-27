@@ -38,7 +38,7 @@ public class IpsController : ControllerBase
     [HttpGet("search")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<UsersSearchResponse>> FindUsersByIp(
+    public async Task<IActionResult> FindUsersByIp(
         [FromQuery] string ip,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100,
@@ -46,7 +46,7 @@ public class IpsController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(ip))
         {
-            return BadRequest(new { Error = "IP is required" });
+            return BadRequest(new object[] { "IP is required" });
         }
 
         try
@@ -64,7 +64,7 @@ public class IpsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { Error = ex.Message });
+            return BadRequest(new object[] { ex.Message });
         }
     }
     
@@ -81,13 +81,13 @@ public class IpsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<UserConnectionResponse>> GetLastConnectionByIp(
+    public async Task<IActionResult> GetLastConnectionByIp(
         [FromRoute] string ip,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(ip))
         {
-            return BadRequest(new { Error = "IP is required" });
+            return BadRequest(new object[] { "IP is required" });
         }
 
         try
@@ -97,7 +97,7 @@ public class IpsController : ControllerBase
 
             if (connection == null)
             {
-                return NotFound(new { Error = $"No connections found for IP {ip}" });
+                return NotFound(new object[] { $"No connections found for IP {ip}" });
             }
 
             return Ok(new UserConnectionResponse
@@ -108,7 +108,7 @@ public class IpsController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { Error = ex.Message });
+            return BadRequest(new object[] { ex.Message });
         }
     }
 }

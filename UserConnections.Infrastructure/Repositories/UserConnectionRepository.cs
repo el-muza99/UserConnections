@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Net;
 using UserConnections.Application.Repositories;
 using UserConnections.Domain.Aggregates;
 using UserConnections.Domain.UserConnectionInfo;
@@ -7,46 +8,97 @@ using UserConnections.Infrastructure.Persistence;
 
 namespace UserConnections.Infrastructure.Repositories;
 
-public class UserConnectionRepository : IUserConnectionRepository
+public class UserConnectionRepository(UserConnectionDbContext dbContext) : IUserConnectionRepository
 {
-    private readonly UserConnectionDbContext _dbContext;
-
-    public UserConnectionRepository(UserConnectionDbContext dbContext)
+    public async Task UpsertAsync(
+        IEnumerable<UserConnection> userConnections,
+        CancellationToken ct = default)
     {
-        _dbContext = dbContext;
+        var connections = userConnections.ToList();
+        if (!connections.Any()) return;
+        
+        var (userIds, ipAddresses) = ExtractUniqueIdentifiers(connections);
+        var existingEntities = await FetchExistingConnections(userIds, ipAddresses, ct);
+        var existingConnectionsMap = BuildConnectionsMap(existingEntities);
+        var newConnections = ProcessConnections(connections, existingConnectionsMap);
+        
+        await SaveChanges(newConnections, ct);
     }
-
-    public async Task<bool> UpsertAsync(UserConnection userConnection, CancellationToken ct = default)
+    
+    private (List<long> UserIds, List<string> IpAddresses) ExtractUniqueIdentifiers(List<UserConnection> connections)
     {
-        var entity = await _dbContext.UserConnections
-            .FirstOrDefaultAsync(x => 
-                x.UserId == userConnection.UserId && 
-                x.IpAddress == userConnection.IpAddress.Value, 
-                ct);
-
-        if (entity == null)
+        var userIds = connections.Select(c => c.UserId).Distinct().ToList();
+        var ipAddresses = connections.Select(c => c.IpAddress.Value).Distinct().ToList();
+        return (userIds, ipAddresses);
+    }
+    
+    private async Task<List<UserConnectionEntity>> FetchExistingConnections(
+        List<long> userIds, 
+        List<string> ipAddresses, 
+        CancellationToken ct)
+    {
+        return await dbContext.UserConnections
+            .Where(x => userIds.Contains(x.UserId) && ipAddresses.Contains(x.IpAddress))
+            .ToListAsync(ct);
+    }
+    
+    private Dictionary<(long UserId, string IpAddress), UserConnectionEntity> BuildConnectionsMap(
+        List<UserConnectionEntity> existingEntities)
+    {
+        return existingEntities
+            .ToDictionary(
+                key => (key.UserId, key.IpAddress),
+                value => value);
+    }
+    
+    private List<UserConnectionEntity> ProcessConnections(
+        List<UserConnection> connections,
+        Dictionary<(long UserId, string IpAddress), UserConnectionEntity> existingConnectionsMap)
+    {
+        var newConnections = new List<UserConnectionEntity>();
+        
+        foreach (var userConnection in connections)
         {
-            entity = new UserConnectionEntity
-            {
-                UserId = userConnection.UserId,
-                IpAddress = userConnection.IpAddress.Value,
-                LastConnectionUtc = userConnection.LastConnectionUtc
-            };
+            var connectionKey = (userConnection.UserId, userConnection.IpAddress.Value);
             
-            _dbContext.UserConnections.Add(entity);
-            await _dbContext.SaveChangesAsync(ct);
-            return true;
+            if (existingConnectionsMap.TryGetValue(connectionKey, out var existingConnection))
+            {
+                UpdateConnectionTimeIfNewer(existingConnection, userConnection.LastConnectionUtc);
+            }
+            else
+            {
+                newConnections.Add(CreateNewConnectionEntity(userConnection));
+            }
         }
         
-        if (entity.LastConnectionUtc >= userConnection.LastConnectionUtc)
-        {
-            return false;
-        }
-
-        entity.LastConnectionUtc = userConnection.LastConnectionUtc;
-        await _dbContext.SaveChangesAsync(ct);
-        return true;
+        return newConnections;
     }
+    
+    private async Task SaveChanges(List<UserConnectionEntity> newConnections, CancellationToken ct)
+    {
+        if (newConnections.Any())
+        {
+            await dbContext.UserConnections.AddRangeAsync(newConnections, ct);
+        }
+        
+        await dbContext.SaveChangesAsync(ct);
+    }
+
+    private static void UpdateConnectionTimeIfNewer(UserConnectionEntity entity, DateTime newConnectionTime)
+    {
+        if (entity.LastConnectionUtc < newConnectionTime)
+        {
+            entity.LastConnectionUtc = newConnectionTime;
+        }
+    }
+
+    private static UserConnectionEntity CreateNewConnectionEntity(UserConnection userConnection) =>
+        new()
+        {
+            UserId = userConnection.UserId,
+            IpAddress = userConnection.IpAddress.Value,
+            LastConnectionUtc = userConnection.LastConnectionUtc
+        };
 
     public async Task<(IEnumerable<long> UserIds, int TotalCount)> FindUsersByIpPrefixAsync(
         string ipPrefix, 
@@ -57,7 +109,7 @@ public class UserConnectionRepository : IUserConnectionRepository
         page = Math.Max(1, page);
         pageSize = Math.Min(1000, Math.Max(1, pageSize));
         
-        var query = _dbContext.UserConnections
+        var query = dbContext.UserConnections
             .Where(x => EF.Functions.ILike(x.IpAddress, $"{ipPrefix}%"))
             .Select(x => x.UserId)
             .Distinct();
@@ -75,7 +127,7 @@ public class UserConnectionRepository : IUserConnectionRepository
         long userId, 
         CancellationToken ct = default)
     {
-        var connections = await _dbContext.UserConnections
+        var connections = await dbContext.UserConnections
             .Where(x => x.UserId == userId)
             .ToListAsync(ct);
             
@@ -90,7 +142,7 @@ public class UserConnectionRepository : IUserConnectionRepository
         long userId, 
         CancellationToken ct = default)
     {
-        var lastConnection = await _dbContext.UserConnections
+        var lastConnection = await dbContext.UserConnections
             .Where(x => x.UserId == userId)
             .OrderByDescending(x => x.LastConnectionUtc)
             .FirstOrDefaultAsync(ct);
@@ -98,7 +150,7 @@ public class UserConnectionRepository : IUserConnectionRepository
         if (lastConnection == null)
             return null;
             
-        return Domain.UserConnectionInfo.UserConnectionInfo.Create(
+        return UserConnectionInfo.Create(
             lastConnection.UserId,
             lastConnection.IpAddress,
             lastConnection.LastConnectionUtc);
@@ -108,7 +160,7 @@ public class UserConnectionRepository : IUserConnectionRepository
         string ip, 
         CancellationToken ct = default)
     {
-        var lastConnection = await _dbContext.UserConnections
+        var lastConnection = await dbContext.UserConnections
             .Where(x => x.IpAddress == ip)
             .OrderByDescending(x => x.LastConnectionUtc)
             .FirstOrDefaultAsync(ct);
@@ -116,7 +168,7 @@ public class UserConnectionRepository : IUserConnectionRepository
         if (lastConnection == null)
             return null;
             
-        return Domain.UserConnectionInfo.UserConnectionInfo.Create(
+        return UserConnectionInfo.Create(
             lastConnection.UserId,
             lastConnection.IpAddress,
             lastConnection.LastConnectionUtc);

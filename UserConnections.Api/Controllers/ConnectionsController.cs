@@ -20,7 +20,7 @@ public class ConnectionsController(IMediator mediator) : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(request.IpAddress))
         {
-            return BadRequest(new { Error = "IP address is required" });
+            return BadRequest(new object[] { "IP address is required" });
         }
 
         var command = new CreateUserConnection(request.UserId, request.IpAddress);
@@ -42,13 +42,13 @@ public class ConnectionsController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<UserIpsResponse>> GetUserIps(
+    public async Task<IActionResult> GetUserIps(
         [FromRoute] long userId,
         CancellationToken ct = default)
     {
         if (userId <= 0)
         {
-            return BadRequest(new { Error = "User ID must be greater than 0" });
+            return BadRequest(new object[] { "User ID must be greater than 0" });
         }
 
         try
@@ -58,7 +58,7 @@ public class ConnectionsController(IMediator mediator) : ControllerBase
 
             if (!result.Connections.Any())
             {
-                return NotFound(new { Error = $"No connections found for user {userId}" });
+                return NotFound(new object[] { $"No connections found for user {userId}" });
             }
 
             return Ok(new UserIpsResponse
@@ -73,7 +73,7 @@ public class ConnectionsController(IMediator mediator) : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { Error = ex.Message });
+            return BadRequest(new object[] { ex.Message });
         }
     }
 
@@ -90,13 +90,13 @@ public class ConnectionsController(IMediator mediator) : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<LastConnectionResponse>> GetLastConnection(
+    public async Task<IActionResult> GetLastConnection(
         [FromRoute] long userId,
         CancellationToken ct = default)
     {
         if (userId <= 0)
         {
-            return BadRequest(new { Error = "User ID must be greater than 0" });
+            return BadRequest(new object[] { "User ID must be greater than 0" });
         }
 
         try
@@ -106,7 +106,7 @@ public class ConnectionsController(IMediator mediator) : ControllerBase
 
             if (lastConnection == null)
             {
-                return NotFound(new { Error = $"No connections found for user {userId}" });
+                return NotFound(new object[] { $"No connections found for user {userId}" });
             }
 
             return Ok(new LastConnectionResponse
@@ -118,7 +118,7 @@ public class ConnectionsController(IMediator mediator) : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(new { Error = ex.Message });
+            return BadRequest(new object[] { ex.Message });
         }
     }
 }

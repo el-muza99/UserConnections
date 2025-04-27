@@ -7,7 +7,6 @@ namespace UserConnections.Application.Handlers;
 
 public record CreateUserConnection(long UserId, string IpAddress) : IRequest;
 
-
 public class CreateUserConnectionHandler(
     IUserConnectionOutboxRepository outboxRepository,
     IUnitOfWork unitOfWork)
@@ -15,6 +14,7 @@ public class CreateUserConnectionHandler(
 {
     public async Task Handle(CreateUserConnection request, CancellationToken cancellationToken)
     {
+        // The IpAddress.Create method already handles validation
         var ipAddress = IpAddress.Create(request.IpAddress);
         var connectedAtUtc = DateTime.UtcNow;
         
