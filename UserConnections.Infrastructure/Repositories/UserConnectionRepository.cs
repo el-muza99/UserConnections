@@ -24,7 +24,90 @@ public class UserConnectionRepository(UserConnectionDbContext dbContext) : IUser
         
         await SaveChanges(newConnections, ct);
     }
+
+    public async Task<(IEnumerable<long> UserIds, int TotalCount)> FindUsersByIpPrefixAsync(
+        string ipPrefix, 
+        int page = 1, 
+        int pageSize = 100, 
+        CancellationToken ct = default)
+    {
+        page = Math.Max(1, page);
+        pageSize = Math.Min(1000, Math.Max(1, pageSize));
+        
+        var query = dbContext
+            .UserConnections
+            .AsNoTracking()
+            .Where(x => EF.Functions.ILike(x.IpAddress, $"{ipPrefix}%"))
+            .Select(x => x.UserId)
+            .Distinct();
+            
+        var totalCount = await query.CountAsync(ct);
+        var userIds = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+            
+        return (userIds, totalCount);
+    }
+
+    public async Task<IEnumerable<UserConnectionInfo>> GetUserIpsAsync(
+        long userId, 
+        CancellationToken ct = default)
+    {
+        var connections = await dbContext
+            .UserConnections
+            .AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .ToListAsync(ct);
+            
+        return connections.Select(x => 
+            Domain.UserConnectionInfo.UserConnectionInfo.Create(
+                x.UserId, 
+                x.IpAddress, 
+                x.LastConnectionUtc));
+    }
+
+    public async Task<UserConnectionInfo?> GetLastUserConnectionAsync(
+        long userId, 
+        CancellationToken ct = default)
+    {
+        var lastConnection = await dbContext
+            .UserConnections
+            .AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .OrderByDescending(x => x.LastConnectionUtc)
+            .FirstOrDefaultAsync(ct);
+            
+        if (lastConnection == null)
+            return null;
+            
+        return UserConnectionInfo.Create(
+            lastConnection.UserId,
+            lastConnection.IpAddress,
+            lastConnection.LastConnectionUtc);
+    }
+
+    public async Task<UserConnectionInfo?> GetLastConnectionByIpAsync(
+        string ip, 
+        CancellationToken ct = default)
+    {
+        var lastConnection = await dbContext
+            .UserConnections
+            .AsNoTracking()
+            .Where(x => x.IpAddress == ip)
+            .OrderByDescending(x => x.LastConnectionUtc)
+            .FirstOrDefaultAsync(ct);
+            
+        if (lastConnection == null)
+            return null;
+            
+        return UserConnectionInfo.Create(
+            lastConnection.UserId,
+            lastConnection.IpAddress,
+            lastConnection.LastConnectionUtc);
+    }
     
+        
     private (List<long> UserIds, List<string> IpAddresses) ExtractUniqueIdentifiers(List<UserConnection> connections)
     {
         var userIds = connections.Select(c => c.UserId).Distinct().ToList();
@@ -99,78 +182,4 @@ public class UserConnectionRepository(UserConnectionDbContext dbContext) : IUser
             IpAddress = userConnection.IpAddress.Value,
             LastConnectionUtc = userConnection.LastConnectionUtc
         };
-
-    public async Task<(IEnumerable<long> UserIds, int TotalCount)> FindUsersByIpPrefixAsync(
-        string ipPrefix, 
-        int page = 1, 
-        int pageSize = 100, 
-        CancellationToken ct = default)
-    {
-        page = Math.Max(1, page);
-        pageSize = Math.Min(1000, Math.Max(1, pageSize));
-        
-        var query = dbContext.UserConnections
-            .Where(x => EF.Functions.ILike(x.IpAddress, $"{ipPrefix}%"))
-            .Select(x => x.UserId)
-            .Distinct();
-            
-        var totalCount = await query.CountAsync(ct);
-        var userIds = await query
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(ct);
-            
-        return (userIds, totalCount);
-    }
-
-    public async Task<IEnumerable<UserConnectionInfo>> GetUserIpsAsync(
-        long userId, 
-        CancellationToken ct = default)
-    {
-        var connections = await dbContext.UserConnections
-            .Where(x => x.UserId == userId)
-            .ToListAsync(ct);
-            
-        return connections.Select(x => 
-            Domain.UserConnectionInfo.UserConnectionInfo.Create(
-                x.UserId, 
-                x.IpAddress, 
-                x.LastConnectionUtc));
-    }
-
-    public async Task<UserConnectionInfo?> GetLastUserConnectionAsync(
-        long userId, 
-        CancellationToken ct = default)
-    {
-        var lastConnection = await dbContext.UserConnections
-            .Where(x => x.UserId == userId)
-            .OrderByDescending(x => x.LastConnectionUtc)
-            .FirstOrDefaultAsync(ct);
-            
-        if (lastConnection == null)
-            return null;
-            
-        return UserConnectionInfo.Create(
-            lastConnection.UserId,
-            lastConnection.IpAddress,
-            lastConnection.LastConnectionUtc);
-    }
-
-    public async Task<UserConnectionInfo?> GetLastConnectionByIpAsync(
-        string ip, 
-        CancellationToken ct = default)
-    {
-        var lastConnection = await dbContext.UserConnections
-            .Where(x => x.IpAddress == ip)
-            .OrderByDescending(x => x.LastConnectionUtc)
-            .FirstOrDefaultAsync(ct);
-            
-        if (lastConnection == null)
-            return null;
-            
-        return UserConnectionInfo.Create(
-            lastConnection.UserId,
-            lastConnection.IpAddress,
-            lastConnection.LastConnectionUtc);
-    }
 } 

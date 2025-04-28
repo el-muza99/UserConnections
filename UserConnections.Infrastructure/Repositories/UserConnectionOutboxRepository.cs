@@ -6,15 +6,8 @@ using UserConnections.Infrastructure.Persistence;
 
 namespace UserConnections.Infrastructure.Repositories;
 
-public class UserConnectionOutboxRepository : IUserConnectionOutboxRepository
+public class UserConnectionOutboxRepository(UserConnectionDbContext dbContext) : IUserConnectionOutboxRepository
 {
-    private readonly UserConnectionDbContext _dbContext;
-
-    public UserConnectionOutboxRepository(UserConnectionDbContext dbContext)
-    {
-        _dbContext = dbContext;
-    }
-
     public async Task SaveAsync(ConnectionEvent connectionEvent, CancellationToken cancellationToken = default)
     {
         var outboxEvent = new ConnectionEventOutbox
@@ -26,7 +19,6 @@ public class UserConnectionOutboxRepository : IUserConnectionOutboxRepository
             CreatedAtUtc = DateTime.UtcNow
         };
         
-        _dbContext.ConnectionEvents.Add(outboxEvent);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await dbContext.ConnectionEvents.AddAsync(outboxEvent, cancellationToken);
     }
 } 
