@@ -31,8 +31,9 @@ public sealed record IpAddress
             throw new ArgumentException("Invalid IP address format.", nameof(ip));
 
         // For IPv4, ensure it has the proper 4-octet format (x.x.x.x)
-        if (parsedIp.AddressFamily == AddressFamily.InterNetwork && !IPv4Regex.IsMatch(ip))
-            throw new ArgumentException("IPv4 address must be in format: xxx.xxx.xxx.xxx", nameof(ip));
+        if ((parsedIp.AddressFamily == AddressFamily.InterNetwork && !IPv4Regex.IsMatch(ip)) 
+            || !(parsedIp.AddressFamily == AddressFamily.InterNetworkV6 && IPv6Regex.IsMatch(ip)))
+            throw new ArgumentException("IPv4 address must be in format: xxx.xxx.xxx.xxx or IPv6", nameof(ip));
 
         var addressType = parsedIp.AddressFamily switch
         {
